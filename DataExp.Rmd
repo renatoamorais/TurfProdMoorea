@@ -10,8 +10,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Packages
 
-```{r}
+```{r, echo=FALSE}
 library(tidyverse)
+library(brms)
 
 ```
 
@@ -19,13 +20,15 @@ library(tidyverse)
 
 ```{r and cleaning data}
 data <- read_csv('turf_prod_val.csv') |> 
-  filter(!is.na(Depth))
+  filter(!is.na(depth))
 
 names(data)[1] <- 'prod'
 
 x <- str_split(data$prod, '\xb1')
-data$mean_prod <- as.numeric(substr(unlist(lapply(x, function(x)x[1])),1,3))
+data$mean_prod <- as.numeric(substr(unlist(lapply(x, function(x)x[1])),1,4))
 data$se_prod <- as.numeric(substr(unlist(lapply(x, function(x)x[2])),2,5))
+
+data <- data %>% filter(mean_prod != 0)
 
 ```
 
@@ -37,13 +40,57 @@ ggplot(data %>% filter(!is.na(se_prod))) +
   geom_point(aes(x=mean_prod,y=se_prod))
 
 ```
-## Predicting variability using the mean for 14 points
+## Predicting variability using the mean for 14 points and also adjusting McClure 2019,
+## which is a ci and not se, and also adding a small non zero value to all zero se
 
-```{r }
+```{r predicting se}
 mod_se <- lm(se_prod ~ mean_prod, data=data)
 
-data[is.na(data$se_prod),'se_prod'] <- predict(mod_se, newdata=data[is.na(data$se_prod),])
+data[is.na(data$se_prod),'se_prod'] <- round(predict(mod_se, newdata=data[is.na(data$se_prod),]),2)
+
+data[data$Ref == 'McClure 2019', 'se_prod'] <- data[data$Ref == 'McClure 2019', 'se_prod'] / 1.96
+
+nzmin <- function(x) min(x[x>0])
+
+data[data$se_prod == 0,'se_prod'] <- nzmin(data$se_prod)
 
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Now log transforming mean and log, which is a tedious process
+
+```{r}
+
+ml_se_prod <- log(data$mean_prod - data$se_prod)
+data$log_mean_prod <- log(data$mean_prod)
+
+round(abs(ml_se_prod) / abs(data$log_mean_prod),2)
+
+
+```
+
+
+## And finally modelling
+
+```{r, echo=FALSE}
+
+
+pri <- get_prior(mean_prod | se(se_prod, sigma=TRUE) ~ 1 + log(depth),
+          data = data,
+          family=skew_normal())
+
+brmod <- brm(mean_prod | se(se_prod, sigma=TRUE) ~ 1 + log(depth), 
+             data = data,
+             family=skew_normal(),
+             prior = pri,
+             chains = 4, iter = 5000, thin = 3)
+
+```
+
+## And more finally still, predicting
+
+```{r}
+
+posterior_epred(brmod, 
+      newdata=data.frame(depth=1:5, se_prod=0.1))
+
+```
