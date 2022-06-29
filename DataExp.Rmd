@@ -22,6 +22,7 @@ library(brms)
 data <- read_csv('turf_prod_val.csv') |> 
   filter(!is.na(depth))
 
+unit <- names(data)[1]
 names(data)[1] <- 'prod'
 
 x <- str_split(data$prod, '\xb1')
@@ -56,17 +57,6 @@ data[data$se_prod == 0,'se_prod'] <- nzmin(data$se_prod)
 
 ```
 
-## Now log transforming mean and log, which is a tedious process
-
-```{r}
-
-ml_se_prod <- log(data$mean_prod - data$se_prod)
-data$log_mean_prod <- log(data$mean_prod)
-
-round(abs(ml_se_prod) / abs(data$log_mean_prod),2)
-
-
-```
 
 
 ## And finally modelling
@@ -86,11 +76,79 @@ brmod <- brm(mean_prod | se(se_prod, sigma=TRUE) ~ 1 + log(depth),
 
 ```
 
-## And more finally still, predicting
+## Loading and tidying data to predict for
 
 ```{r}
 
-posterior_epred(brmod, 
-      newdata=data.frame(depth=1:5, se_prod=0.1))
+## Constrained max depth of site to 15m
+
+pred_depth <- read.csv('moorea_depth.csv') %>% 
+  mutate(site=tolower(site)) %>%
+  group_by(site) %>%
+  mutate(depth=if_else(depth < -15,-15, depth)*-1) %>%
+  slice_max(depth)
+
+pred_data <- read.csv('moorea_benthos.csv') %>% 
+  mutate(site=gsub('\\s','_',tolower(site)))
+
 
 ```
+
+
+## Filtering and manipulating the time series for the correct categories
+
+```{r}
+
+ts_data <- left_join(pred_data,pred_depth, by='site') %>%
+  filter(Habitat=='Outer slope' & Season=='Mar') %>% 
+  mutate(subs_group=case_when(
+      Substrate == 'Dead coral' ~ 'algal_turf',
+      Substrate == 'Stegastes Turf' ~ 'algal_turf',
+      Substrate == 'Rubble' ~ 'algal_turf',
+      Substrate == 'Pavement' ~ 'algal_turf',
+      Substrate == 'Macroalgae' ~ 'macroalgae',
+      Substrate == 'Turbinaria' ~ 'macroalgae',
+      TRUE ~ Substrate,
+  )) %>%
+  filter(subs_group %in% c('algal_turf','macroalgae')) %>%
+  group_by(Year, site, Transect, lat, long, depth, subs_group) %>%
+  summarise(prop=sum(proportion), .groups='drop_last') %>%
+  pivot_wider(names_from=subs_group,values_from=prop,values_fill=0)
+
+
+```
+
+
+## Now, how about trying to predict benthic reef productivity
+## by merging area specific turf productivity with turf cover
+
+```{r}
+
+pred_val <- posterior_epred(brmod, 
+      newdata=ts_data %>% mutate(se_prod=0.1), ndraws=1000)
+
+
+dim(ts_data)
+dim(pred_val)
+
+tot_turf_prod <- (ts_data$algal_turf * t(pred_val)) * 10000
+apply()
+
+tot_turf_prod[1:10,1:10]
+t(pred_val)[1:10,1:10]
+unit
+ts_data
+
+# aggregating
+
+cbind(ts_data,
+      turf_prod_mean=apply(pred_val,2,median),
+      turf_prod_lhdi=apply(pred_val,2,function(x) median_hdci(x)$ymin),
+      turf_prod_uhdi=apply(pred_val,2,function(x) median_hdci(x)$ymax))
+
+
+```
+
+
+
+
