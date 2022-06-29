@@ -1,6 +1,8 @@
 ---
 title: "Data Exploration"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 date: '2022-06-28'
 ---
 
@@ -13,6 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, echo=FALSE}
 library(tidyverse)
 library(brms)
+library(tidybayes)
 
 ```
 
@@ -132,23 +135,30 @@ dim(ts_data)
 dim(pred_val)
 
 tot_turf_prod <- (ts_data$algal_turf * t(pred_val)) * 10000
-apply()
+## in g C ha day-1
 
-tot_turf_prod[1:10,1:10]
-t(pred_val)[1:10,1:10]
-unit
-ts_data
 
 # aggregating
 
-cbind(ts_data,
-      turf_prod_mean=apply(pred_val,2,median),
-      turf_prod_lhdi=apply(pred_val,2,function(x) median_hdci(x)$ymin),
-      turf_prod_uhdi=apply(pred_val,2,function(x) median_hdci(x)$ymax))
+fts_data <- cbind(ts_data,
+      turf_prod_mean=apply(tot_turf_prod,1,median),
+      turf_prod_lhdi=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymin),
+      turf_prod_uhdi=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymax))
 
-
+## in g C ha-1 day-1
 ```
 
+## Now doing some plots
+
+```{r}
+
+ggplot(data=fts_data) +
+  geom_line(aes(x=Year,y=turf_prod_mean,group=interaction(Transect,site))) +
+  geom_smooth(aes(x=Year,y=turf_prod_mean), colour='orange', alpha=0.8) +
+  scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
+  ylab(expression(Algal~turf~productivity~'('*g~C~ha^-1*day^-1*')')) +
+  theme_minimal()
+```
 
 
 
