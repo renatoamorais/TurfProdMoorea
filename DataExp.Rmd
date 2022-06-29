@@ -1,0 +1,49 @@
+---
+title: "Data Exploration"
+output: html_document
+date: '2022-06-28'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Packages
+
+```{r}
+library(tidyverse)
+
+```
+
+## Loading data
+
+```{r and cleaning data}
+data <- read_csv('turf_prod_val.csv') |> 
+  filter(!is.na(Depth))
+
+names(data)[1] <- 'prod'
+
+x <- str_split(data$prod, '\xb1')
+data$mean_prod <- as.numeric(substr(unlist(lapply(x, function(x)x[1])),1,3))
+data$se_prod <- as.numeric(substr(unlist(lapply(x, function(x)x[2])),2,5))
+
+```
+
+## Now, for the data points we do not have se, determine one from the relationship between mean and se:
+
+```{r , echo=FALSE}
+
+ggplot(data %>% filter(!is.na(se_prod))) +
+  geom_point(aes(x=mean_prod,y=se_prod))
+
+```
+## Predicting variability using the mean for 14 points
+
+```{r }
+mod_se <- lm(se_prod ~ mean_prod, data=data)
+
+data[is.na(data$se_prod),'se_prod'] <- predict(mod_se, newdata=data[is.na(data$se_prod),])
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
