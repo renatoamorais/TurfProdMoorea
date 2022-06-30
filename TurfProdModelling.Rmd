@@ -52,6 +52,7 @@ ggplot(data %>% filter(!is.na(se_prod))) +
 
 ```{r predicting se}
 mod_se <- lm(se_prod ~ mean_prod, data=data)
+## Model sucks, but better than to consider zero
 
 data[is.na(data$se_prod),'se_prod'] <- round(predict(mod_se, newdata=data[is.na(data$se_prod),]),2)
 data[data$Ref == 'McClure 2019', 'se_prod'] <- data[data$Ref == 'McClure 2019', 'se_prod'] / 1.96
@@ -135,8 +136,8 @@ ts_data <- left_join(pred_data,pred_depth, by='site') %>%
 pred_val <- posterior_epred(brmod, 
       newdata=ts_data %>% mutate(se_prod=0.1), ndraws=1000)
 
-tot_turf_prod <- (ts_data$algal_turf * t(pred_val)) * 10000
-## in g C ha day-1
+tot_turf_prod <- ((ts_data$algal_turf * t(pred_val)) * 10000)/1000
+## in kg C ha day-1
 
 
 # aggregating
@@ -146,7 +147,7 @@ fts_data <- cbind(ts_data,
       turf_prod_lhdi=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymin),
       turf_prod_uhdi=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymax))
 
-## in g C ha-1 day-1
+## in kg C ha-1 day-1
 ```
 
 ## Now plotting
@@ -160,48 +161,115 @@ ggplot(data=fts_data) +
               method = 'loess', formula = y ~ x,
               colour='orange', alpha=0.8) +
   scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
-  ylab(expression(Algal~turf~productivity~'('*g~C~ha^-1*day^-1*')')) +
+  ylab(expression(Algal~turf~productivity~'('*kg~C~ha^-1*day^-1*')')) +
   theme_minimal()
 
 ```
 
-### And using Duarte's et al 2022's data to explore a model for macroalgae and halimeda?
+## And using Duarte's et al 2022's data to explore a model for macroalgae
+### It could be possible to do the same for Halimeda, but there are less values
+### Maybe return to this possibility later?
+
 ```{r}
 
 dmachal <- read.csv('macroalgae_npp_dataset.csv') %>%
-  filter(Habitat_category_Duarte_etal_2021 %in% c('Coral Reef Algae','Halimeda bioherme ','Subtidal brown algae') & abs(Latitude_decimal_degrees) < 30)
+  filter(Habitat_category_Duarte_etal_2021 %in% c('Coral Reef Algae','Subtidal brown algae') & abs(Latitude_decimal_degrees) < 27 & Taxa != 'Turf assemblage') %>%
+  mutate(mean_prod = ((Avg_NPP_kg_C_m2_y) * 1000) / 365, 
+         se_prod   = ((stdev_NPP_kg_C_m2_y) * 1000) / 365)
+# in g C m-2 day-1
 
 
+## Having a look at the data from a few perspectives
 
+p1 <- ggplot(dmachal) +
+  geom_point(aes(x=Depth_max_m, y=mean_prod))
 
-## How many and what are the available values for Halimeda first
-
-ggplot(dmachal %>% filter(Genus == 'Halimeda')) +
-  geom_point(aes(x=Depth_max_m, y=Avg_NPP_kg_C_m2_y))
-
-```
-```{r}
-p1 <- ggplot(data=ts_data) +
-  geom_line(aes(x=Year,y=macroalgae,group=interaction(Transect,site))) +
-  geom_smooth(aes(x=Year,y=macroalgae), 
-              method = 'loess', formula = y ~ x,
-              colour='orange', alpha=0.8) +
-  scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
-  ylab('Macroalgae cover') +
-  theme_minimal()
-
-
-p2 <- ggplot(data=ts_data) +
-  geom_line(aes(x=Year,y=halimeda,group=interaction(Transect,site))) +
-  geom_smooth(aes(x=Year,y=halimeda), 
-              method = 'loess', formula = y ~ x,
-              colour='orange', alpha=0.8) +
-  scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
-  ylab('Halimeda cover') +
-  theme_minimal()
+p2 <-ggplot(dmachal) +
+  geom_point(aes(x=Latitude_decimal_degrees, y=mean_prod))
 
 p1 + p2
 
+## Get outta here, nothing useful to predict so just including variability in a meta-analysis
 
 ```
+
+## Can we predict standard error values from a relationship between mean 
+## and se as we did for algal turfs?
+
+```{r , echo=FALSE}
+
+ggplot(dmachal %>% filter(!is.na(se_prod))) +
+  geom_point(aes(x=mean_prod,y=se_prod))
+
+```
+
+```{r}
+mod_se2 <- lm(se_prod ~ mean_prod, data=dmachal)
+## Again, Model sucks, but better than to consider zero
+
+dmachal[is.na(dmachal$se_prod),'se_prod'] <- round(predict(mod_se2, newdata=dmachal[is.na(dmachal$se_prod),]),2)
+
+```
+
+
+## And finally modelling macroalgae productivity using a meta-analysis 
+## Bayesian model with depth as the only predictor
+
+```{r}
+
+pri2 <- get_prior(mean_prod | se(se_prod, sigma=TRUE) ~ 1,
+          data = dmachal,
+          family=skew_normal())
+
+brmod2 <- brm(mean_prod | se(se_prod, sigma=TRUE) ~ 1, 
+             data = dmachal,
+             family=skew_normal(),
+             prior = pri2,
+             chains = 4, iter = 5000, thin = 3)
+
+saveRDS(brmod2,'macro_prod_brms.RDS')
+
+```
+
+
+
+## Now, how about trying to predict benthicmacroalgae productivity
+## by merging area specific turf productivity predicted
+## using the data compiled by Duarte et al 2022 and macroalgae cover?
+
+```{r}
+
+pred_val2 <- posterior_epred(brmod2, 
+      newdata=ts_data %>% mutate(se_prod=0.1), ndraws=1000)
+
+tot_macr_prod <- ((ts_data$macroalgae * t(pred_val2)) * 10000)/1000
+## in kg C ha day-1
+
+
+# aggregating
+
+fts_data <- cbind(fts_data,
+      macr_prod_mean=apply(tot_macr_prod,1,median),
+      macr_prod_lhdi=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymin),
+      macr_prod_uhdi=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymax))
+
+## in g C ha-1 day-1
+```
+
+## Now plotting
+
+### First the time series of macroalgae productivity over time in Moorea
+```{r}
+
+ggplot(data=fts_data) +
+  geom_line(aes(x=Year,y=macr_prod_mean,group=interaction(Transect,site))) +
+  geom_smooth(aes(x=Year,y=macr_prod_mean), 
+              method = 'loess', formula = y ~ x,
+              colour='orange', alpha=0.8) +
+  scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
+  ylab(expression(Macroalgae~productivity~'('*kg~C~ha^-1*day^-1*')')) +
+  theme_minimal()
+
+```
+
 
