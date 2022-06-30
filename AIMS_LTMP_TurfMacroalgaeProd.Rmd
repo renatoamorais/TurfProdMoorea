@@ -31,5 +31,14 @@ ltmp_depth <- read.csv('AIMS_LTMP_depths.csv') %>%
   group_by(REEF_NAME, SITE_NO, REPORT_YEAR, TRANSECT_NO) %>%
   summarise(depth=mean(START_DEPTH), groups='drop.last')
 
+names(ltmp_depth) <- tolower(names(ltmp_depth))
+
+
+ltmp <- left_join(
+  ltmp_cover,
+  ltmp_depth,
+  by=c('reef_name','site_no','transect_no','report_year')
+)
+
 ```
 
