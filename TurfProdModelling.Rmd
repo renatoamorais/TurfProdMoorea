@@ -12,14 +12,16 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Packages
 
-```{r, echo=FALSE}
+```{r, include=FALSE}
 library(tidyverse)
 library(brms)
 library(tidybayes)
+library(patchwork)
 
 ```
 
-## Loading data
+## Loading data compiled and reworked by Tebbett and Bellwood 2021 Mar Env Res.
+## Depth data were added manually by looking at each individual study
 
 ```{r and cleaning data}
 data <- read_csv('turf_prod_val.csv') |> 
@@ -36,7 +38,8 @@ data <- data %>% filter(mean_prod != 0)
 
 ```
 
-## Now, for the data points we do not have se, determine one from the relationship between mean and se:
+## Now, for the data points we do not have standard error values, 
+## determine them from the relationship between mean and se:
 
 ```{r , echo=FALSE}
 
@@ -51,21 +54,18 @@ ggplot(data %>% filter(!is.na(se_prod))) +
 mod_se <- lm(se_prod ~ mean_prod, data=data)
 
 data[is.na(data$se_prod),'se_prod'] <- round(predict(mod_se, newdata=data[is.na(data$se_prod),]),2)
-
 data[data$Ref == 'McClure 2019', 'se_prod'] <- data[data$Ref == 'McClure 2019', 'se_prod'] / 1.96
-
 nzmin <- function(x) min(x[x>0])
-
 data[data$se_prod == 0,'se_prod'] <- nzmin(data$se_prod)
 
 ```
 
 
 
-## And finally modelling
+## And finally modelling algal turf productivity using a meta-analysis 
+## Bayesian model with depth as the only predictor
 
-```{r, echo=FALSE}
-
+```{r, include=FALSE}
 
 pri <- get_prior(mean_prod | se(se_prod, sigma=TRUE) ~ 1 + log(depth),
           data = data,
@@ -76,6 +76,8 @@ brmod <- brm(mean_prod | se(se_prod, sigma=TRUE) ~ 1 + log(depth),
              family=skew_normal(),
              prior = pri,
              chains = 4, iter = 5000, thin = 3)
+
+saveRDS(brmod,'turf_prod_brms.RDS')
 
 ```
 
@@ -98,7 +100,8 @@ pred_data <- read.csv('moorea_benthos.csv') %>%
 ```
 
 
-## Filtering and manipulating the time series for the correct categories
+## Filtering and manipulating the time series for the categories of interest.
+## For Moorea, at the moment, these could be algal turfs, halimeda and macroalgae
 
 ```{r}
 
@@ -111,9 +114,10 @@ ts_data <- left_join(pred_data,pred_depth, by='site') %>%
       Substrate == 'Pavement' ~ 'algal_turf',
       Substrate == 'Macroalgae' ~ 'macroalgae',
       Substrate == 'Turbinaria' ~ 'macroalgae',
+      Substrate == 'Halimeda' ~ 'halimeda',
       TRUE ~ Substrate,
   )) %>%
-  filter(subs_group %in% c('algal_turf','macroalgae')) %>%
+  filter(subs_group %in% c('algal_turf','macroalgae', 'halimeda')) %>%
   group_by(Year, site, Transect, lat, long, depth, subs_group) %>%
   summarise(prop=sum(proportion), .groups='drop_last') %>%
   pivot_wider(names_from=subs_group,values_from=prop,values_fill=0)
@@ -123,16 +127,13 @@ ts_data <- left_join(pred_data,pred_depth, by='site') %>%
 
 
 ## Now, how about trying to predict benthic reef productivity
-## by merging area specific turf productivity with turf cover
+## by merging area specific turf productivity predicted
+## using the data compiled by Tebbett and Bellwood and turf cover?
 
 ```{r}
 
 pred_val <- posterior_epred(brmod, 
       newdata=ts_data %>% mutate(se_prod=0.1), ndraws=1000)
-
-
-dim(ts_data)
-dim(pred_val)
 
 tot_turf_prod <- (ts_data$algal_turf * t(pred_val)) * 10000
 ## in g C ha day-1
@@ -148,31 +149,58 @@ fts_data <- cbind(ts_data,
 ## in g C ha-1 day-1
 ```
 
-## Now doing some plots
+## Now plotting
 
 ### First the time series of turf productivity over time in Moorea
 ```{r}
 
 ggplot(data=fts_data) +
   geom_line(aes(x=Year,y=turf_prod_mean,group=interaction(Transect,site))) +
-  geom_smooth(aes(x=Year,y=turf_prod_mean), colour='orange', alpha=0.8) +
+  geom_smooth(aes(x=Year,y=turf_prod_mean), 
+              method = 'loess', formula = y ~ x,
+              colour='orange', alpha=0.8) +
   scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
   ylab(expression(Algal~turf~productivity~'('*g~C~ha^-1*day^-1*')')) +
   theme_minimal()
 
 ```
 
-### First the time series of turf productivity over time in Moorea
+### And using Duarte's et al 2022's data to explore a model for macroalgae and halimeda?
 ```{r}
 
-ggplot(data=fts_data) +
-  geom_line(aes(x=Year,y=turf_prod_mean,group=interaction(Transect,site))) +
-  geom_smooth(aes(x=Year,y=turf_prod_mean), colour='orange', alpha=0.8) +
+dmachal <- read.csv('macroalgae_npp_dataset.csv') %>%
+  filter(Habitat_category_Duarte_etal_2021 %in% c('Coral Reef Algae','Halimeda bioherme ','Subtidal brown algae') & abs(Latitude_decimal_degrees) < 30)
+
+
+
+
+## How many and what are the available values for Halimeda first
+
+ggplot(dmachal %>% filter(Genus == 'Halimeda')) +
+  geom_point(aes(x=Depth_max_m, y=Avg_NPP_kg_C_m2_y))
+
+```
+```{r}
+p1 <- ggplot(data=ts_data) +
+  geom_line(aes(x=Year,y=macroalgae,group=interaction(Transect,site))) +
+  geom_smooth(aes(x=Year,y=macroalgae), 
+              method = 'loess', formula = y ~ x,
+              colour='orange', alpha=0.8) +
   scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
-  ylab(expression(Algal~turf~productivity~'('*g~C~ha^-1*day^-1*')')) +
+  ylab('Macroalgae cover') +
   theme_minimal()
 
-load('benthos.RData')
+
+p2 <- ggplot(data=ts_data) +
+  geom_line(aes(x=Year,y=halimeda,group=interaction(Transect,site))) +
+  geom_smooth(aes(x=Year,y=halimeda), 
+              method = 'loess', formula = y ~ x,
+              colour='orange', alpha=0.8) +
+  scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
+  ylab('Halimeda cover') +
+  theme_minimal()
+
+p1 + p2
 
 
 ```
