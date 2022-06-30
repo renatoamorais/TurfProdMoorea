@@ -1,5 +1,5 @@
 ---
-title: "TUrf production modelling"
+title: "Turf and macroalgae productivity on coral reefs: a modelling exercise in Moorea"
 output:
   pdf_document: default
   html_document: default
@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Packages
 
-```{r, include=FALSE}
+```{r, echo=FALSE}
 library(tidyverse)
 library(brms)
 library(tidybayes)
@@ -41,7 +41,7 @@ data <- data %>% filter(mean_prod != 0)
 ## Now, for the data points we do not have standard error values, 
 ## determine them from the relationship between mean and se:
 
-```{r , echo=FALSE}
+```{r}
 
 ggplot(data %>% filter(!is.na(se_prod))) +
   geom_point(aes(x=mean_prod,y=se_prod))
@@ -66,7 +66,7 @@ data[data$se_prod == 0,'se_prod'] <- nzmin(data$se_prod)
 ## And finally modelling algal turf productivity using a meta-analysis 
 ## Bayesian model with depth as the only predictor
 
-```{r, include=FALSE}
+```{r, echo=FALSE}
 
 pri <- get_prior(mean_prod | se(se_prod, sigma=TRUE) ~ 1 + log(depth),
           data = data,
@@ -215,7 +215,7 @@ dmachal[is.na(dmachal$se_prod),'se_prod'] <- round(predict(mod_se2, newdata=dmac
 ## And finally modelling macroalgae productivity using a meta-analysis 
 ## Bayesian model with depth as the only predictor
 
-```{r}
+```{r, echo=FALSE}
 
 pri2 <- get_prior(mean_prod | se(se_prod, sigma=TRUE) ~ 1,
           data = dmachal,
