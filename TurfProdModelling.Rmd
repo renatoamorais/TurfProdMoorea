@@ -156,8 +156,8 @@ fts_data <- cbind(ts_data,
 ```{r}
 
 ggplot(data=fts_data) +
-  geom_line(aes(x=Year,y=turf_prod_mean,group=interaction(Transect,site))) +
-  geom_smooth(aes(x=Year,y=turf_prod_mean), 
+  geom_line(aes(x=Year,y=turf_prod_kghaday_med,group=interaction(Transect,site))) +
+  geom_smooth(aes(x=Year,y=turf_prod_kghaday_med), 
               method = 'loess', formula = y ~ x,
               colour='orange', alpha=0.8) +
   scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
@@ -249,9 +249,9 @@ tot_macr_prod <- ((ts_data$macroalgae * t(pred_val2)) * 10000)/1000
 # aggregating
 
 fts_data <- cbind(fts_data,
-      macr_prod_mean=apply(tot_macr_prod,1,median),
-      macr_prod_lhdi=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymin),
-      macr_prod_uhdi=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymax))
+      macr_prod_kghaday_med=apply(tot_macr_prod,1,median),
+      macr_prod_kghaday_lhd=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymin),
+      macr_prod_kghaday_uhd=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymax))
 
 ## in g C ha-1 day-1
 ```
@@ -262,8 +262,8 @@ fts_data <- cbind(fts_data,
 ```{r}
 
 ggplot(data=fts_data) +
-  geom_line(aes(x=Year,y=macr_prod_mean,group=interaction(Transect,site))) +
-  geom_smooth(aes(x=Year,y=macr_prod_mean), 
+  geom_line(aes(x=Year,y=macr_prod_kghaday_med,group=interaction(Transect,site))) +
+  geom_smooth(aes(x=Year,y=macr_prod_kghaday_med), 
               method = 'loess', formula = y ~ x,
               colour='orange', alpha=0.8) +
   scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
@@ -272,4 +272,9 @@ ggplot(data=fts_data) +
 
 ```
 
+## Saving the final estimates fro Moorea
+
+```{r}
+write.csv(fts_data,'Moorea_turf_macr_prod.csv', row.names=FALSE)
+```
 
