@@ -27,7 +27,9 @@ turf_prodmod <- readRDS('turf_prod_brms.RDS')
 ```{r}
 ltmp_cover <- read.csv('AIMS_LTMP_cover.csv')
 ltmp_depth <- read.csv('AIMS_LTMP_depths.csv') %>%
-  mutate_all(tolower)
+  mutate(REEF_NAME=tolower(gsub(' ','_', REEF_NAME))) %>%
+  group_by(REEF_NAME, SITE_NO, REPORT_YEAR, TRANSECT_NO) %>%
+  summarise(depth=mean(START_DEPTH), groups='drop.last')
 
 ```
 
