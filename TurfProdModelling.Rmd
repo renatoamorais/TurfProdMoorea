@@ -118,7 +118,7 @@ ts_data <- left_join(pred_data,pred_depth, by='site') %>%
       Substrate == 'Halimeda' ~ 'halimeda',
       TRUE ~ Substrate,
   )) %>%
-  filter(subs_group %in% c('algal_turf','macroalgae', 'halimeda')) %>%
+  filter(subs_group %in% c('algal_turf','macroalgae')) %>%
   group_by(Year, site, Transect, lat, long, depth, subs_group) %>%
   summarise(prop=sum(proportion), .groups='drop_last') %>%
   pivot_wider(names_from=subs_group,values_from=prop,values_fill=0)
@@ -143,9 +143,9 @@ tot_turf_prod <- ((ts_data$algal_turf * t(pred_val)) * 10000)/1000
 # aggregating
 
 fts_data <- cbind(ts_data,
-      turf_prod_mean=apply(tot_turf_prod,1,median),
-      turf_prod_lhdi=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymin),
-      turf_prod_uhdi=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymax))
+      turf_prod_kghaday_med=apply(tot_turf_prod,1,median),
+      turf_prod_kghaday_lhd=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymin),
+      turf_prod_kghaday_uhd=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymax))
 
 ## in kg C ha-1 day-1
 ```
