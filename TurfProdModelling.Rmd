@@ -1,5 +1,5 @@
 ---
-title: "Data Exploration"
+title: "TUrf production modelling"
 output:
   pdf_document: default
   html_document: default
@@ -150,6 +150,7 @@ fts_data <- cbind(ts_data,
 
 ## Now doing some plots
 
+### First the time series of turf productivity over time in Moorea
 ```{r}
 
 ggplot(data=fts_data) +
@@ -161,5 +162,18 @@ ggplot(data=fts_data) +
 
 ```
 
+### First the time series of turf productivity over time in Moorea
+```{r}
 
+ggplot(data=fts_data) +
+  geom_line(aes(x=Year,y=turf_prod_mean,group=interaction(Transect,site))) +
+  geom_smooth(aes(x=Year,y=turf_prod_mean), colour='orange', alpha=0.8) +
+  scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
+  ylab(expression(Algal~turf~productivity~'('*g~C~ha^-1*day^-1*')')) +
+  theme_minimal()
+
+load('benthos.RData')
+
+
+```
 
