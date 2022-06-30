@@ -1,0 +1,33 @@
+---
+title: "Algal turf and macroalgae productivity from the AIMS LTMP"
+author: "Renato"
+date: '2022-06-30'
+output: pdf_document
+---
+
+```{r, message=FALSE}
+library(tidyverse)
+library(brms)
+library(tidybayes)
+library(patchwork)
+library(PNWColors)
+```
+
+## Loading the two meta-analysis models
+One developed to predict algal turf productivity from depth,
+and the other simply as an average macroalgal productivity (no predictors)
+
+```{r}
+macr_prodmod <- readRDS('macro_prod_brms.RDS')
+turf_prodmod <- readRDS('turf_prod_brms.RDS')
+```
+
+## And loading the AIMS LTMP data for which they will be predicted
+
+```{r}
+ltmp_cover <- read.csv('AIMS_LTMP_cover.csv')
+ltmp_depth <- read.csv('AIMS_LTMP_depths.csv') %>%
+  mutate_all(tolower)
+
+```
+

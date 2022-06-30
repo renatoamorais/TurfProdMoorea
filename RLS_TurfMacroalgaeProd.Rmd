@@ -9,15 +9,13 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
 ```{r, message=FALSE}
 library(tidyverse)
 library(brms)
 library(tidybayes)
 library(patchwork)
+library(PNWColors)
 ```
 
 ## Loading the two meta-analysis models
@@ -31,23 +29,100 @@ turf_prodmod <- readRDS('turf_prod_brms.RDS')
 
 ## And loading RLS data for which they will be predicted
 ```{r}
+
 load('RLStropical_raw.rdata')
-load('RRLS_habitat.rdata')
+load('RLS_env_spatio_temporal.rdata')
 load('RLS_sitesInfos.rdata')
 
+```
+
+## But sure there is a bit of processing to be done
+
+```{r, message=FALSE}
 rls <- RLS_sitesInfos %>%
-  select(SurveyID, Depth) %>%
+  select(SurveyID, depth=Depth) %>%
   right_join(.,
     RLStropical_raw %>%
       mutate(SurveyID = as.integer(rownames(RLStropical_raw))),
     by='SurveyID'
   ) %>% 
+  left_join(.,
+    RLS_env_spatio_temporal %>%
+      select(SurveyID,chl=median_chl_5year,sst=mean_sst_5year,minsst=min_sst_5year),
+    by='SurveyID'
+  ) %>%
   mutate(
     algal_turf = rowSums(.[,c('coral rubble','turf algae')])/100,
     macroalgae = rowSums(.[,c('canopy forming macroalgae','fleshy algae','understory macroalgae')])/100
   ) %>% 
-  select(SurveyID,Depth,algal_turf,macroalgae)
+  select(SurveyID,depth,chl,sst,minsst,algal_turf,macroalgae)
   
+
+```
+
+## Turf prediction coming
+
+```{r}
+
+pred_val <- posterior_epred(turf_prodmod, 
+      newdata=rls %>% mutate(se_prod=0.1), ndraws=1000)
+
+tot_turf_prod <- ((rls$algal_turf * t(pred_val)) * 10000)/1000
+## in kg C ha day-1
+
+
+# aggregating
+
+rls_pred <- cbind(rls,
+      turf_prod_kghaday_med=apply(tot_turf_prod,1,median),
+      turf_prod_kghaday_lhd=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymin),
+      turf_prod_kghaday_uhd=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymax))
+
+```
+
+## But also macroalgae
+
+```{r}
+
+pred_val2 <- posterior_epred(macr_prodmod, 
+      newdata=rls %>% mutate(se_prod=0.1), ndraws=1000)
+
+tot_macr_prod <- ((rls$macroalgae * t(pred_val2)) * 10000)/1000
+## in kg C ha day-1
+
+
+# aggregating
+
+rls_pred <- cbind(rls_pred,
+      macr_prod_kghaday_med=apply(tot_macr_prod,1,median),
+      macr_prod_kghaday_lhd=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymin),
+      macr_prod_kghaday_uhd=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymax))
+
+```
+
+
+## How to they relate to each other?
+
+```{r}
+ggplot(rls_pred) +
+  geom_linerange(
+    aes(xmin=turf_prod_kghaday_lhd,
+        xmax=turf_prod_kghaday_uhd,
+        y=macr_prod_kghaday_med),
+    size=0.1) +
+  geom_linerange(
+    aes(ymin=macr_prod_kghaday_lhd,
+        ymax=macr_prod_kghaday_uhd,
+        x=turf_prod_kghaday_med),
+    size=0.1) +
+  geom_point(
+    aes(x=turf_prod_kghaday_med,
+        y=macr_prod_kghaday_med,
+        colour=log(chl))) +
+  scale_colour_gradientn(colours=pnw_palette("Bay",10)) +
+  labs(x=expression(Algal~turf~productivity~'('*kg~C~ha^-1*day^-1*')'),
+       y=expression(Macroalgae~productivity~'('*kg~C~ha^-1*day^-1*')')) +
+  theme_minimal()
 
 ```
 
