@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Packages
 
-```{r, echo=FALSE}
+```{r, message=FALSE}
 library(tidyverse)
 library(brms)
 library(tidybayes)
@@ -20,10 +20,10 @@ library(patchwork)
 
 ```
 
-## Loading data compiled and reworked by Tebbett and Bellwood 2021 Mar Env Res.
-## Depth data were added manually by looking at each individual study
+### Loading data compiled and reworked by Tebbett and Bellwood 2021 Mar Env Res.
+Depth data were added manually by looking at each individual study
 
-```{r and cleaning data}
+```{r and cleaning data, message=FALSE}
 data <- read_csv('turf_prod_val.csv') |> 
   filter(!is.na(depth))
 
@@ -47,8 +47,10 @@ ggplot(data %>% filter(!is.na(se_prod))) +
   geom_point(aes(x=mean_prod,y=se_prod))
 
 ```
+
 ## Predicting variability using the mean for 14 points and also adjusting McClure 2019,
 ## which is a ci and not se, and also adding a small non zero value to all zero se
+
 
 ```{r predicting se}
 mod_se <- lm(se_prod ~ mean_prod, data=data)
@@ -66,7 +68,7 @@ data[data$se_prod == 0,'se_prod'] <- nzmin(data$se_prod)
 ## And finally modelling algal turf productivity using a meta-analysis 
 ## Bayesian model with depth as the only predictor
 
-```{r, echo=FALSE}
+```{r}
 
 pri <- get_prior(mean_prod | se(se_prod, sigma=TRUE) ~ 1 + log(depth),
           data = data,
@@ -170,7 +172,7 @@ ggplot(data=fts_data) +
 ### It could be possible to do the same for Halimeda, but there are less values
 ### Maybe return to this possibility later?
 
-```{r}
+```{r, warning = FALSE}
 
 dmachal <- read.csv('macroalgae_npp_dataset.csv') %>%
   filter(Habitat_category_Duarte_etal_2021 %in% c('Coral Reef Algae','Subtidal brown algae') & abs(Latitude_decimal_degrees) < 27 & Taxa != 'Turf assemblage') %>%
@@ -196,7 +198,7 @@ p1 + p2
 ## Can we predict standard error values from a relationship between mean 
 ## and se as we did for algal turfs?
 
-```{r , echo=FALSE}
+```{r , message=FALSE}
 
 ggplot(dmachal %>% filter(!is.na(se_prod))) +
   geom_point(aes(x=mean_prod,y=se_prod))

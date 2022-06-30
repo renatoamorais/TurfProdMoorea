@@ -1,0 +1,53 @@
+---
+title: "Algal turf and macroalgae productivity from the RLS dataset"
+author: "Renato"
+date: '2022-06-30'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+```{r, message=FALSE}
+library(tidyverse)
+library(brms)
+library(tidybayes)
+library(patchwork)
+```
+
+## Loading the two meta-analysis models
+One developed to predict algal turf productivity from depth,
+and the other simply as an average macroalgal productivity (no predictors)
+
+```{r}
+macr_prodmod <- readRDS('macro_prod_brms.RDS')
+turf_prodmod <- readRDS('turf_prod_brms.RDS')
+```
+
+## And loading RLS data for which they will be predicted
+```{r}
+load('RLStropical_raw.rdata')
+load('RRLS_habitat.rdata')
+load('RLS_sitesInfos.rdata')
+
+rls <- RLS_sitesInfos %>%
+  select(SurveyID, Depth) %>%
+  right_join(.,
+    RLStropical_raw %>%
+      mutate(SurveyID = as.integer(rownames(RLStropical_raw))),
+    by='SurveyID'
+  ) %>% 
+  mutate(
+    algal_turf = rowSums(.[,c('coral rubble','turf algae')])/100,
+    macroalgae = rowSums(.[,c('canopy forming macroalgae','fleshy algae','understory macroalgae')])/100
+  ) %>% 
+  select(SurveyID,Depth,algal_turf,macroalgae)
+  
+
+```
+
