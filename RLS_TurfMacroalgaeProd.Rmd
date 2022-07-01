@@ -23,16 +23,16 @@ One developed to predict algal turf productivity from depth,
 and the other simply as an average macroalgal productivity (no predictors)
 
 ```{r}
-macr_prodmod <- readRDS('macro_prod_brms.RDS')
-turf_prodmod <- readRDS('turf_prod_brms.RDS')
+macr_prodmod <- readRDS('mods/macro_prod_brms.RDS')
+turf_prodmod <- readRDS('mods/turf_prod_brms.RDS')
 ```
 
 ## And loading RLS data for which they will be predicted
 ```{r}
 
-load('RLStropical_raw.rdata')
-load('RLS_env_spatio_temporal.rdata')
-load('RLS_sitesInfos.rdata')
+load('data/RLStropical_raw.rdata')
+load('data/RLS_env_spatio_temporal.rdata')
+load('data/RLS_sitesInfos.rdata')
 
 ```
 
@@ -124,5 +124,8 @@ ggplot(rls_pred) +
        y=expression(Macroalgae~productivity~'('*kg~C~ha^-1*day^-1*')')) +
   theme_minimal()
 
+```
+```{r}
+saveRDS(rls_pred,'preds/RLS_TurfMacroalgaeProd_preds.RDS')
 ```
 

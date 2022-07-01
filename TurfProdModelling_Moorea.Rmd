@@ -1,9 +1,8 @@
 ---
-title: "Turf and macroalgae productivity on coral reefs: a modelling exercise in Moorea"
-output:
-  pdf_document: default
-  html_document: default
+title: 'Turf and macroalgae productivity on coral reefs: a modelling exercise in Moorea'
+author: "Renato"
 date: '2022-06-28'
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -24,7 +23,7 @@ library(patchwork)
 Depth data were added manually by looking at each individual study
 
 ```{r and cleaning data, message=FALSE}
-data <- read_csv('turf_prod_val.csv') |> 
+data <- read_csv('data/turf_prod_val.csv') |> 
   filter(!is.na(depth))
 
 unit <- names(data)[1]
@@ -80,7 +79,7 @@ brmod <- brm(mean_prod | se(se_prod, sigma=TRUE) ~ 1 + log(depth),
              prior = pri,
              chains = 4, iter = 5000, thin = 3)
 
-saveRDS(brmod,'turf_prod_brms.RDS')
+saveRDS(brmod,'mods/turf_prod_brms.RDS')
 
 ```
 
@@ -90,13 +89,13 @@ saveRDS(brmod,'turf_prod_brms.RDS')
 
 ## Constrained max depth of site to 15m
 
-pred_depth <- read.csv('moorea_depth.csv') %>% 
+pred_depth <- read.csv('data/moorea_depth.csv') %>% 
   mutate(site=tolower(site)) %>%
   group_by(site) %>%
   mutate(depth=if_else(depth < -15,-15, depth)*-1) %>%
   slice_max(depth)
 
-pred_data <- read.csv('moorea_benthos.csv') %>% 
+pred_data <- read.csv('data/moorea_benthos.csv') %>% 
   mutate(site=gsub('\\s','_',tolower(site)))
 
 
@@ -174,7 +173,7 @@ ggplot(data=fts_data) +
 
 ```{r, warning = FALSE}
 
-dmachal <- read.csv('macroalgae_npp_dataset.csv') %>%
+dmachal <- read.csv('data/macroalgae_npp_dataset.csv') %>%
   filter(Habitat_category_Duarte_etal_2021 %in% c('Coral Reef Algae','Subtidal brown algae') & abs(Latitude_decimal_degrees) < 27 & Taxa != 'Turf assemblage') %>%
   mutate(mean_prod = ((Avg_NPP_kg_C_m2_y) * 1000) / 365, 
          se_prod   = ((stdev_NPP_kg_C_m2_y) * 1000) / 365)
@@ -229,7 +228,7 @@ brmod2 <- brm(mean_prod | se(se_prod, sigma=TRUE) ~ 1,
              prior = pri2,
              chains = 4, iter = 5000, thin = 3)
 
-saveRDS(brmod2,'macro_prod_brms.RDS')
+saveRDS(brmod2,'mods/macro_prod_brms.RDS')
 
 ```
 
@@ -277,6 +276,6 @@ ggplot(data=fts_data) +
 ## Saving the final estimates fro Moorea
 
 ```{r}
-write.csv(fts_data,'Moorea_turf_macr_prod.csv', row.names=FALSE)
+saveRDS(fts_data,'preds/Moorea_TurfMacroalgaeProd_preds.RDS')
 ```
 

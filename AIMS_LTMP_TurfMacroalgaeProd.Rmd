@@ -18,18 +18,21 @@ One developed to predict algal turf productivity from depth,
 and the other simply as an average macroalgal productivity (no predictors)
 
 ```{r}
-macr_prodmod <- readRDS('macro_prod_brms.RDS')
-turf_prodmod <- readRDS('turf_prod_brms.RDS')
+macr_prodmod <- readRDS('mods/macro_prod_brms.RDS')
+turf_prodmod <- readRDS('mods/turf_prod_brms.RDS')
 ```
 
 ## And loading the AIMS LTMP data for which they will be predicted
 
 ```{r}
-ltmp_cover <- read.csv('AIMS_LTMP_cover.csv')
-ltmp_depth <- read.csv('AIMS_LTMP_depths.csv') %>%
+ltmp_cover <- read.csv('data/AIMS_LTMP_cover.csv') %>%
+  mutate(cover=total_cover/100) %>%
+    select(-X,-total_cover)
+
+ltmp_depth <- read.csv('data/AIMS_LTMP_depths.csv') %>%
   mutate(REEF_NAME=tolower(gsub(' ','_', REEF_NAME))) %>%
   group_by(REEF_NAME, SITE_NO, REPORT_YEAR, TRANSECT_NO) %>%
-  summarise(depth=mean(START_DEPTH), groups='drop.last')
+  summarise(depth=mean(START_DEPTH), .groups='drop_last')
 
 names(ltmp_depth) <- tolower(names(ltmp_depth))
 
@@ -38,7 +41,99 @@ ltmp <- left_join(
   ltmp_cover,
   ltmp_depth,
   by=c('reef_name','site_no','transect_no','report_year')
-)
+) %>%
+  pivot_wider(names_from='group_code',
+              values_from='cover') %>%
+  rename(algal_turf = ta, macroalgae = ma)
 
 ```
 
+
+## Turf prediction coming
+
+```{r}
+
+pred_val <- posterior_epred(turf_prodmod, 
+      newdata=ltmp %>% mutate(se_prod=0.1), ndraws=1000)
+
+tot_turf_prod <- ((ltmp$algal_turf * t(pred_val)) * 10000)/1000
+## in kg C ha day-1
+
+
+# aggregating
+
+ltmp_pred <- cbind(ltmp,
+      turf_prod_kghaday_med=apply(tot_turf_prod,1,median),
+      turf_prod_kghaday_lhd=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymin),
+      turf_prod_kghaday_uhd=apply(tot_turf_prod,1,function(x) median_hdci(x)$ymax))
+
+```
+
+## But also macroalgae
+
+```{r}
+
+pred_val2 <- posterior_epred(macr_prodmod, 
+      newdata=ltmp %>% mutate(se_prod=0.1), ndraws=1000)
+
+tot_macr_prod <- ((ltmp$macroalgae * t(pred_val2)) * 10000)/1000
+## in kg C ha day-1
+
+
+# aggregating
+
+ltmp_pred <- cbind(ltmp_pred,
+      macr_prod_kghaday_med=apply(tot_macr_prod,1,median),
+      macr_prod_kghaday_lhd=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymin),
+      macr_prod_kghaday_uhd=apply(tot_macr_prod,1,function(x) median_hdci(x)$ymax))
+
+```
+
+
+### First the time series of turf productivity over time in Moorea
+```{r, fig.height=5, fig.width=3.125, warning=FALSE}
+
+ggplot(data=ltmp_pred) +
+  geom_line(aes(x=report_year,y=turf_prod_kghaday_med,group=interaction(transect_no,site_no))) +
+  geom_smooth(aes(x=report_year,y=turf_prod_kghaday_med), 
+              method = 'loess', formula = y ~ x,
+              colour='orange', alpha=0.8) +
+  #scale_x_continuous(breaks=c(2005,2009,2013,2017)) +
+  facet_wrap(~reef_name,nrow=3) +
+  ylab(expression(Algal~turf~productivity~'('*kg~C~ha^-1*day^-1*')')) +
+  theme_minimal()
+
+```
+
+
+## How to they relate to each other?
+
+```{r, warning=FALSE}
+ggplot(ltmp_pred) +
+  geom_linerange(
+    aes(xmin=turf_prod_kghaday_lhd,
+        xmax=turf_prod_kghaday_uhd,
+        y=macr_prod_kghaday_med),
+    size=0.1) +
+  geom_linerange(
+    aes(ymin=macr_prod_kghaday_lhd,
+        ymax=macr_prod_kghaday_uhd,
+        x=turf_prod_kghaday_med),
+    size=0.1) +
+  geom_point(
+    aes(x=turf_prod_kghaday_med,
+        y=macr_prod_kghaday_med,
+        colour=report_year)) +
+  scale_colour_gradientn(colours=pnw_palette("Bay",10)) +
+  scale_y_log10() +
+  labs(x=expression(Algal~turf~productivity~'('*kg~C~ha^-1*day^-1*')'),
+       y=expression(Macroalgae~productivity~'('*kg~C~ha^-1*day^-1*')')) +
+  theme_minimal()
+
+```
+
+## Saving
+
+```{r}
+saveRDS(ltmp_pred,'preds/LTMP_TurfMacroalgaeProd_preds.RDS')
+```
